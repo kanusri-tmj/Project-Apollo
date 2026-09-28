@@ -1,0 +1,174 @@
+{
+  "name": "baseline",
+  "version": "1.0.0",
+  "created_utc": "2026-09-26T06:26:33.768523+00:00",
+  "metadata": {
+    "variant": "baseline",
+    "label": "Plain logistic regression",
+    "metrics": {
+      "accuracy": 0.8852459016393442,
+      "precision": 0.8387096774193549,
+      "recall": 0.9285714285714286,
+      "f1": 0.8813559322033898,
+      "roc_auc": 0.961038961038961,
+      "threshold": 0.5
+    },
+    "best_params": {},
+    "cv_best_score": 0.8805485175050392,
+    "features": [
+      "age",
+      "resting_bp",
+      "cholesterol",
+      "max_heart_rate",
+      "st_depression",
+      "sex",
+      "chest_pain_type",
+      "fasting_blood_sugar",
+      "resting_ecg",
+      "exercise_angina",
+      "st_slope",
+      "num_major_vessels",
+      "thalassemia"
+    ],
+    "transformed_features": [
+      "age",
+      "resting_bp",
+      "cholesterol",
+      "max_heart_rate",
+      "st_depression",
+      "age_chol",
+      "sex_1.0",
+      "chest_pain_type_2.0",
+      "chest_pain_type_3.0",
+      "chest_pain_type_4.0",
+      "fasting_blood_sugar_1.0",
+      "resting_ecg_1.0",
+      "resting_ecg_2.0",
+      "exercise_angina_1.0",
+      "st_slope_2.0",
+      "st_slope_3.0",
+      "num_major_vessels_1.0",
+      "num_major_vessels_2.0",
+      "num_major_vessels_3.0",
+      "thalassemia_6.0",
+      "thalassemia_7.0",
+      "age_band_50-59",
+      "age_band_60-69",
+      "age_band_70+",
+      "age_band_<40"
+    ],
+    "train_size": 242,
+    "train_prevalence": 0.45867768595041325,
+    "input_spec": [
+      {
+        "name": "age",
+        "type": "number",
+        "range": "18 - 100",
+        "description": "Age in years"
+      },
+      {
+        "name": "resting_bp",
+        "type": "number",
+        "range": "80 - 220",
+        "description": "Resting blood pressure (mm Hg)"
+      },
+      {
+        "name": "cholesterol",
+        "type": "number",
+        "range": "100 - 600",
+        "description": "Serum cholesterol (mg/dl)"
+      },
+      {
+        "name": "max_heart_rate",
+        "type": "number",
+        "range": "60 - 220",
+        "description": "Maximum heart rate achieved"
+      },
+      {
+        "name": "st_depression",
+        "type": "number",
+        "range": "0.0 - 7.0",
+        "description": "ST depression induced by exercise (oldpeak)"
+      },
+      {
+        "name": "sex",
+        "type": "categorical",
+        "options": {
+          "0": "Female",
+          "1": "Male"
+        },
+        "description": "Sex"
+      },
+      {
+        "name": "chest_pain_type",
+        "type": "categorical",
+        "options": {
+          "1": "Typical angina",
+          "2": "Atypical angina",
+          "3": "Non-anginal pain",
+          "4": "Asymptomatic"
+        },
+        "description": "Chest pain type"
+      },
+      {
+        "name": "fasting_blood_sugar",
+        "type": "categorical",
+        "options": {
+          "0": "<= 120 mg/dl",
+          "1": "> 120 mg/dl"
+        },
+        "description": "Fasting blood sugar"
+      },
+      {
+        "name": "resting_ecg",
+        "type": "categorical",
+        "options": {
+          "0": "Normal",
+          "1": "ST-T abnormality",
+          "2": "LV hypertrophy"
+        },
+        "description": "Resting ecg"
+      },
+      {
+        "name": "exercise_angina",
+        "type": "categorical",
+        "options": {
+          "0": "No",
+          "1": "Yes"
+        },
+        "description": "Exercise angina"
+      },
+      {
+        "name": "st_slope",
+        "type": "categorical",
+        "options": {
+          "1": "Upsloping",
+          "2": "Flat",
+          "3": "Downsloping"
+        },
+        "description": "St slope"
+      },
+      {
+        "name": "num_major_vessels",
+        "type": "categorical",
+        "options": {
+          "0": "0",
+          "1": "1",
+          "2": "2",
+          "3": "3"
+        },
+        "description": "Num major vessels"
+      },
+      {
+        "name": "thalassemia",
+        "type": "categorical",
+        "options": {
+          "3": "Normal",
+          "6": "Fixed defect",
+          "7": "Reversible defect"
+        },
+        "description": "Thalassemia"
+      }
+    ]
+  }
+}

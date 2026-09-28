@@ -1,0 +1,44 @@
+# Render blueprint — Blueprints > New Blueprint Instance > pick this repo.
+# Docs: https://render.com/docs/blueprint-spec
+#
+# Design notes
+# ------------
+# * Trained artifacts under models/ are committed to the repository, so nothing
+#   is trained at deploy time and the service only ever reads from disk. Render's
+#   filesystem is ephemeral, so this is also the only reliable option.
+# * Only runtime dependencies are installed (requirements-render.txt): no
+#   matplotlib / seaborn / jupyter / streamlit, which keeps the build quick and
+#   removes a class of build failures. Those pins are exact and resolve to
+#   binary wheels for Python 3.14 on Linux — no compilation required.
+# * gunicorn binds to the port Render injects ($PORT) and never to a hardcoded
+#   5000, and the health check points at /health, which returns 503 until a
+#   model is actually loaded. A deploy shipped without artifacts therefore fails
+#   loudly instead of serving 503 to every request.
+#
+# Region: Render defaults to `oregon`. You cannot change a service's region after
+# it is created, so if most of your users are in South Asia, uncomment the line
+# below before the first deploy to cut round-trip latency roughly in half.
+#   region: singapore
+
+services:
+  - type: web
+    name: heart-disease-prediction
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements-render.txt
+    startCommand: gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 120 --access-logfile - wsgi:app
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    envVars:
+      # Must be a fully qualified version (Render rejects "3.14" here) and must
+      # stay in step with .python-version — a test enforces that.
+      - key: PYTHON_VERSION
+        value: "3.14.3"
+      # Stream logs to Render's log viewer in real time instead of buffering.
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      # Render computes a WEB_CONCURRENCY based on the instance size; pin it to 1
+      # so the free plan's 512 MB stays comfortable. The models are ~10 KB each
+      # and inference is CPU-light, so gunicorn's threads handle concurrency.
+      - key: WEB_CONCURRENCY
+        value: "1"

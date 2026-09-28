@@ -1,0 +1,35 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# ---- Virtual environments ----
+.venv/
+venv/
+env/
+
+# ---- Data / artifacts (regenerate with `python -m src.train`) ----
+data/raw/*.zip
+data/raw/*.data
+data/processed/*.csv
+reports/*.csv
+reports/figures/*.png
+
+# Timestamped artifacts are an audit trail and stay out of Git ...
+models/*.joblib
+# ... but the stable pointers and their metadata are what the deployed service
+# actually loads, and Render rebuilds from Git with an ephemeral disk, so the
+# model has to live in the repository.
+!models/*_latest.joblib
+# (`models/*_metadata.json` and `models/MODEL_CARD.md` are not ignored at all.)
+
+# ---- Notebooks ----
+notebooks/*.nbconvert.ipynb
+
+# ---- OS / editors ----
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

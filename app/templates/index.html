@@ -1,0 +1,1177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Heart Disease Prediction — Ridge &amp; Lasso Logistic Regression</title>
+<style>
+  /* ===================== Design tokens =====================
+     Palette is 70% white / 20% red / 10% blue.
+       · white — every large surface: page, cards, fields, charts, tracks
+       · red   — primary accent: brand, primary action, risk, "present"
+       · blue  — secondary accent: calm state, "no disease", negative terms
+     Red and blue are each used at one hue; no other hue is introduced, so
+     avoid red→blue gradients (they interpolate through purple).
+     ===================================================== */
+  :root {
+    /* ---- 70% · white + neutral greys ---- */
+    --bg: #ffffff;
+    --bg-soft: #fbfcfe;
+    --card: #ffffff;
+    --card-2: #f5f7fa;
+    --line: #e6e9ef;
+    --ink: #16191f;
+    --muted: #5c6472;
+
+    /* ---- 20% · red ---- */
+    --brand: #d81f36;
+    --brand-strong: #a8162a;
+    --brand-soft: #fdeef0;
+    --brand-line: #f6c9d1;
+
+    /* ---- 10% · blue ---- */
+    --brand-2: #1d4ed8;
+    --brand-2-strong: #163ba8;
+    --brand-2-soft: #eef3fe;
+    --brand-2-line: #c9d9fb;
+
+    /* Semantic aliases, so the existing class names keep their meaning. */
+    --ok: var(--brand-2);
+    --ok-soft: var(--brand-2-soft);
+    --ok-line: var(--brand-2-line);
+    --warn: #e2607a;
+    --danger: var(--brand);
+    --danger-strong: var(--brand-strong);
+    --danger-soft: var(--brand-soft);
+    --danger-line: var(--brand-line);
+
+    --shadow: 0 12px 30px rgba(22, 25, 31, .08);
+    --radius: 16px;
+    --ease: cubic-bezier(.22, .61, .36, 1);
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 84px; }
+  body {
+    margin: 0; background:
+      radial-gradient(1100px 620px at 12% -8%, var(--brand-soft) 0%, transparent 62%),
+      radial-gradient(900px 520px at 88% 2%, var(--brand-2-soft) 0%, transparent 58%),
+      var(--bg);
+    color: var(--ink);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3 { line-height: 1.2; margin: 0 0 .5rem; }
+  a { color: inherit; text-decoration: none; }
+  .wrap { max-width: 1160px; margin: 0 auto; padding: 0 1.25rem; }
+  .muted { color: var(--muted); }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+  /* ===================== Header / nav ===================== */
+  header.topbar {
+    position: sticky; top: 0; z-index: 50;
+    backdrop-filter: blur(14px);
+    background: rgba(255, 255, 255, .82);
+    border-bottom: 1px solid var(--line);
+  }
+  .topbar-inner { display: flex; align-items: center; gap: 1rem; height: 66px; }
+  .brand { display: flex; align-items: center; gap: .6rem; font-weight: 700; letter-spacing: .01em; }
+  .brand .dot {
+    width: 30px; height: 30px; border-radius: 50%;
+    background: linear-gradient(140deg, var(--brand), var(--brand-strong));
+    display: grid; place-items: center; font-size: 15px;
+  }
+  nav.tabs { margin-left: auto; display: flex; gap: .25rem; flex-wrap: wrap; }
+  nav.tabs button {
+    border: 1px solid transparent; background: transparent; color: var(--muted);
+    padding: .5rem .95rem; border-radius: 999px; font: inherit; font-size: .9rem;
+    font-weight: 600; cursor: pointer; transition: all .25s var(--ease);
+  }
+  nav.tabs button:hover { color: var(--ink); background: var(--card-2); }
+  nav.tabs button.active {
+    color: var(--brand-strong); background: var(--brand-soft);
+    border-color: var(--brand-line);
+  }
+  .badge {
+    font-size: .7rem; padding: .15rem .5rem; border-radius: 999px;
+    background: var(--card-2); border: 1px solid var(--line); color: var(--muted);
+  }
+
+  /* ===================== Sections ===================== */
+  section.panel { padding: 3.25rem 0; }
+  section.panel + section.panel { border-top: 1px solid var(--line); }
+  .eyebrow {
+    font-size: .74rem; letter-spacing: .16em; text-transform: uppercase;
+    color: var(--brand); font-weight: 700; margin-bottom: .4rem;
+  }
+  .lead { color: var(--muted); max-width: 62ch; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line); border-radius: var(--radius);
+    box-shadow: var(--shadow); padding: 1.4rem;
+  }
+  .layout { display: grid; grid-template-columns: 1.35fr .95fr; gap: 1.5rem; align-items: start; }
+  @media (max-width: 940px) { .layout { grid-template-columns: 1fr; } }
+  .field-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .85rem; }
+  @media (max-width: 720px) { .field-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  label { display: block; font-size: .76rem; font-weight: 650; margin-bottom: .28rem; }
+  label .hint { color: var(--muted); font-weight: 400; }
+  input, select {
+    width: 100%; padding: .5rem .6rem; font: inherit; font-size: .88rem;
+    color: var(--ink); background: #fff;
+    border: 1px solid var(--line); border-radius: 10px; outline: none;
+    transition: border-color .2s var(--ease), box-shadow .2s var(--ease);
+  }
+  input:focus, select:focus { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(216, 31, 54, .14); }
+  .actions { display: flex; gap: .7rem; align-items: center; margin-top: 1.1rem; flex-wrap: wrap; }
+  button.primary {
+    border: 0; border-radius: 12px; padding: .72rem 1.3rem; font: inherit; font-weight: 700;
+    color: #fff; cursor: pointer;
+    background: linear-gradient(135deg, var(--brand), var(--brand-strong));
+    transition: transform .18s var(--ease), filter .18s var(--ease);
+  }
+  button.primary:hover { transform: translateY(-1px); filter: brightness(1.08); }
+  button.primary:disabled { opacity: .6; cursor: progress; transform: none; }
+  button.ghost {
+    border: 1px solid var(--line); background: transparent; color: var(--ink);
+    padding: .6rem 1rem; border-radius: 12px; font: inherit; font-weight: 600; cursor: pointer;
+    transition: background .2s var(--ease);
+  }
+  button.ghost:hover { background: var(--card-2); }
+
+  /* ===================== Result card ===================== */
+  .result { text-align: center; }
+  .gauge-wrap { position: relative; width: 220px; margin: .4rem auto 0; }
+  .gauge-value {
+    position: absolute; inset: auto 0 8px; text-align: center;
+    font-size: 2.2rem; font-weight: 800; letter-spacing: -.02em;
+  }
+  .gauge-caption { position: absolute; inset: auto 0 -6px; text-align: center; font-size: .72rem; color: var(--muted); }
+  .verdict {
+    display: inline-flex; align-items: center; gap: .5rem; margin-top: 1rem;
+    padding: .45rem .95rem; border-radius: 999px; font-weight: 700; font-size: .88rem;
+    transition: all .35s var(--ease);
+  }
+  .verdict.high { background: var(--danger-soft); color: var(--danger-strong); border: 1px solid var(--danger-line); }
+  .verdict.low { background: var(--ok-soft); color: var(--brand-2); border: 1px solid var(--ok-line); }
+  .verdict.idle { background: var(--card-2); color: var(--muted); border: 1px solid var(--line); }
+  .result-meta { margin-top: .9rem; font-size: .76rem; color: var(--muted); }
+  .prob-bar { height: 8px; border-radius: 999px; background: var(--card-2); overflow: hidden; margin-top: 1rem; }
+  .prob-bar > span {
+    display: block; height: 100%; width: 0; border-radius: 999px;
+    background: linear-gradient(90deg, var(--ok), var(--warn), var(--danger));
+    transition: width 1s var(--ease);
+  }
+  .error { color: var(--danger); font-size: .82rem; margin-top: .6rem; }
+
+  /* ===================== Simulation ===================== */
+  .steps { display: flex; gap: .5rem; flex-wrap: wrap; margin: 1.2rem 0 1.4rem; }
+  .step-chip {
+    display: flex; align-items: center; gap: .45rem; font-size: .78rem; font-weight: 650;
+    padding: .38rem .75rem; border-radius: 999px; border: 1px solid var(--line);
+    background: var(--card); color: var(--muted); transition: all .35s var(--ease);
+  }
+  .step-chip .num {
+    width: 19px; height: 19px; border-radius: 50%; display: grid; place-items: center;
+    background: var(--card-2); font-size: .68rem;
+  }
+  .step-chip.active { color: var(--brand-strong); border-color: var(--brand-line); background: var(--brand-soft); }
+  .step-chip.done { color: var(--brand-2); border-color: var(--ok-line); }
+  .step-chip.done .num { background: var(--ok-soft); }
+
+  .sim-grid { display: grid; gap: 1.25rem; }
+  .sim-card { position: relative; overflow: hidden; }
+  .sim-card h3 { font-size: .95rem; display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+  .sim-card h3 .tag { font-size: .68rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--brand-2); }
+  .sim-card .note { color: var(--muted); font-size: .8rem; margin: .15rem 0 .9rem; }
+  .sim-card.dim { opacity: .45; transition: opacity .4s var(--ease); }
+
+  /* horizontal bar rows */
+  .rows { display: grid; gap: .45rem; }
+  .row { display: grid; grid-template-columns: 190px 1fr 74px; gap: .6rem; align-items: center; font-size: .78rem; }
+  @media (max-width: 700px) { .row { grid-template-columns: 120px 1fr 64px; } }
+  .row .name { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .name.zeroed { text-decoration: line-through; opacity: .6; }
+  .row .val { text-align: right; font-variant-numeric: tabular-nums; }
+  .track { position: relative; height: 16px; background: var(--card-2); border-radius: 8px; overflow: hidden; }
+  .track .axis { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: rgba(22, 25, 31, .16); }
+  .fill {
+    position: absolute; top: 3px; bottom: 3px; left: 50%; width: 0;
+    border-radius: 6px; transition: width .85s var(--ease), background .5s var(--ease), opacity .5s var(--ease);
+  }
+  .fill.pos { background: linear-gradient(90deg, var(--brand-strong), var(--brand)); }
+  .fill.neg { background: linear-gradient(90deg, var(--brand-2-strong), var(--brand-2)); }
+  .ghost-bar {
+    position: absolute; top: 6px; bottom: 6px; left: 50%; width: 0;
+    border-radius: 6px; background: rgba(22, 25, 31, .1);
+    transition: width .85s var(--ease);
+  }
+  .row.dropped .name { text-decoration: line-through; opacity: .55; }
+  .row.dropped .val { opacity: .5; }
+  .drop-pill {
+    font-size: .6rem; padding: .05rem .35rem; border-radius: 999px; margin-left: .35rem;
+    background: var(--danger-soft); color: var(--danger-strong); border: 1px solid var(--danger-line);
+    opacity: 0; transition: opacity .4s var(--ease);
+  }
+  .row.dropped .drop-pill { opacity: 1; }
+
+  /* equation */
+  .equation { display: grid; gap: .3rem; }
+  .term {
+    display: grid; grid-template-columns: 1fr auto auto; gap: .7rem; align-items: baseline;
+    font-size: .8rem; padding: .34rem .55rem; border-radius: 8px;
+    background: var(--card-2); border: 1px solid transparent;
+    opacity: 0; transform: translateY(8px);
+    transition: opacity .45s var(--ease), transform .45s var(--ease), border-color .3s var(--ease);
+  }
+  .term.show { opacity: 1; transform: none; }
+  .term.bump { border-color: var(--brand); }
+  .term .lhs { color: var(--muted); font-size: .76rem; }
+  .term .lhs b { color: var(--ink); }
+  .term .prod { font-variant-numeric: tabular-nums; color: var(--muted); }
+  .term .run { font-variant-numeric: tabular-nums; font-weight: 700; }
+  .run.pos { color: var(--danger); }
+  .run.neg { color: var(--brand-2); }
+  .total {
+    margin-top: .55rem; padding: .6rem .75rem; border-radius: 10px;
+    background: var(--brand-2-soft); border: 1px solid var(--brand-2-line);
+    display: flex; justify-content: space-between; align-items: baseline; gap: 1rem;
+    font-size: .84rem;
+  }
+  .total b { font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+
+  /* sigmoid chart */
+  .sig-wrap { position: relative; height: 250px; margin-top: .4rem;
+              background: var(--bg-soft); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .sig-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .sig-svg path.curve {
+    fill: none; stroke: url(#sigGrad); stroke-width: 3; stroke-linecap: round;
+    /* pathLength="1" on the element normalises the dash maths */
+    stroke-dasharray: 1; stroke-dashoffset: 1;
+    transition: stroke-dashoffset 1.4s var(--ease);
+  }
+  .sig-svg.draw path.curve { stroke-dashoffset: 0; }
+  .sig-guide-v, .sig-guide-h {
+    position: absolute; background-image: linear-gradient(90deg, rgba(22, 25, 31, .22) 50%, transparent 0);
+    background-size: 8px 1px; background-repeat: repeat-x;
+    transition: left 1s var(--ease), top 1s var(--ease);
+  }
+  .sig-guide-v { top: 0; bottom: 0; width: 1px; background-image: linear-gradient(180deg, rgba(22, 25, 31, .22) 50%, transparent 0); background-size: 1px 8px; background-repeat: repeat-y; left: 0; }
+  .sig-guide-h { left: 0; right: 0; height: 1px; top: 0; }
+  .sig-dot {
+    position: absolute; width: 15px; height: 15px; margin: -7.5px 0 0 -7.5px; border-radius: 50%;
+    background: var(--brand); box-shadow: 0 0 0 6px rgba(216, 31, 54, .12), 0 0 14px rgba(216, 31, 54, .5);
+    transition: left 1s var(--ease), top 1s var(--ease);
+  }
+  .sig-labels { position: absolute; inset: auto 0 6px; display: flex; justify-content: space-between; padding: 0 10px; font-size: .68rem; color: var(--muted); }
+  .sig-readout { display: flex; gap: 1.2rem; flex-wrap: wrap; margin-top: .8rem; font-size: .82rem; }
+  .sig-readout div { background: var(--card-2); border: 1px solid var(--line); border-radius: 10px; padding: .45rem .7rem; }
+  .sig-readout b { display: block; font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+
+  .variant-toggle { display: inline-flex; gap: .3rem; background: var(--card-2); border: 1px solid var(--line); border-radius: 999px; padding: .22rem; }
+  .variant-toggle button {
+    border: 0; background: transparent; color: var(--muted); font: inherit; font-size: .78rem; font-weight: 650;
+    padding: .35rem .8rem; border-radius: 999px; cursor: pointer; transition: all .25s var(--ease);
+  }
+  .variant-toggle button.active { background: linear-gradient(135deg, var(--brand), var(--brand-strong)); color: #fff; }
+
+  .placeholder {
+    text-align: center; padding: 2.6rem 1rem; color: var(--muted);
+    border: 1px dashed var(--line); border-radius: var(--radius); background: var(--bg-soft);
+  }
+  .placeholder .big { font-size: 1.7rem; margin-bottom: .4rem; }
+
+  /* ===================== About ===================== */
+  .about-grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 1.5rem; align-items: start; }
+  @media (max-width: 900px) { .about-grid { grid-template-columns: 1fr; } }
+  .about h2 { font-size: 1.35rem; }
+  .kv { display: grid; gap: .7rem; }
+  .kv div { display: flex; justify-content: space-between; gap: 1rem; font-size: .86rem; padding-bottom: .55rem; border-bottom: 1px dashed var(--line); }
+  .kv div:last-child { border-bottom: 0; }
+  .kv span:first-child { color: var(--muted); }
+  .team-member { display: flex; align-items: center; gap: .7rem; padding: .5rem 0; }
+  .avatar {
+    width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center;
+    font-size: .8rem; font-weight: 700; color: #fff;
+    background: linear-gradient(140deg, var(--brand), var(--brand-strong));
+  }
+  footer.foot { padding: 2rem 0 3rem; color: var(--muted); font-size: .78rem; text-align: center; }
+
+  /* ===================== Reveal on scroll ===================== */
+  .reveal { opacity: 0; transform: translateY(18px); transition: opacity .6s var(--ease), transform .6s var(--ease); }
+  .reveal.in { opacity: 1; transform: none; }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    * { transition-duration: .001ms !important; animation-duration: .001ms !important; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="wrap topbar-inner">
+    <div class="brand">
+      <span class="dot">❤</span>
+      <span>Heart Disease Prediction</span>
+      <span class="badge">Ridge &amp; Lasso · v{{ model_version }}</span>
+    </div>
+    <nav class="tabs" id="tabs">
+      <button data-target="home" class="active">Home</button>
+      <button data-target="simulation">Live Simulation</button>
+      <button data-target="about">About Us</button>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- ============================================================ -->
+  <!-- SECTION 1: HOME                                              -->
+  <!-- ============================================================ -->
+  <section id="home" class="panel">
+    <div class="eyebrow">Step 1 · Prediction interface</div>
+    <h1 style="font-size:1.65rem;">Enter patient vitals, get a risk verdict</h1>
+    <p class="lead">
+      Thirteen routine clinical measurements feed a regularised logistic-regression model.
+      You receive a predicted class (<b>disease present / absent</b>) plus a
+      <b>risk probability</b>. Decision support only — not a diagnosis.
+    </p>
+
+    <div class="layout" style="margin-top:1.5rem;">
+      <div class="card reveal">
+        <h2 style="font-size:1rem;">Patient measurements</h2>
+        <p class="note muted" style="font-size:.8rem;margin-bottom:1rem;">
+          Values outside plausible physiological ranges are rejected with a clear message.
+        </p>
+        <form id="patient-form">
+          <div class="field-grid">
+            {% for feature in numeric_features %}
+            <div>
+              <label for="{{ feature }}">
+                {{ feature.replace('_', ' ').capitalize() }}
+                {% if ranges.get(feature) %}<span class="hint">({{ ranges[feature][0] }}–{{ ranges[feature][1] }})</span>{% endif %}
+              </label>
+              <input type="number" step="any" id="{{ feature }}" name="{{ feature }}" required />
+            </div>
+            {% endfor %}
+            {% for feature in categorical_features %}
+            <div>
+              <label for="{{ feature }}">{{ feature.replace('_', ' ').capitalize() }}</label>
+              <select id="{{ feature }}" name="{{ feature }}" required>
+                {% for code, label in category_levels.get(feature, {}).items() %}
+                <option value="{{ code }}">{{ label }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            {% endfor %}
+            <div>
+              <label for="threshold">Decision threshold <span class="hint">(0.05–0.95)</span></label>
+              <input type="number" step="0.05" min="0.05" max="0.95" id="threshold" name="threshold" value="0.50" />
+            </div>
+          </div>
+
+          <div class="actions">
+            <button class="primary" type="submit" id="submit-btn">Predict risk</button>
+            <button class="ghost" type="button" id="demo-btn">Fill example patient</button>
+            <button class="ghost" type="button" id="reset-btn">Clear</button>
+          </div>
+          <div class="error" id="error"></div>
+        </form>
+      </div>
+
+      <div class="card result reveal" id="result-card">
+        <h2 style="font-size:1rem;">Risk verdict</h2>
+        <div class="gauge-wrap">
+          <svg viewBox="0 0 220 130" width="220" height="130" aria-hidden="true">
+            <defs>
+              <linearGradient id="gaugeGrad" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stop-color="#1d4ed8" />
+                <stop offset="55%" stop-color="#e2607a" />
+                <stop offset="100%" stop-color="#d81f36" />
+              </linearGradient>
+            </defs>
+            <path d="M20 110 A 90 90 0 0 1 200 110" fill="none" stroke="#eef0f4" stroke-width="16" stroke-linecap="round" />
+            <path id="gauge-fill" d="M20 110 A 90 90 0 0 1 200 110" fill="none"
+                  stroke="url(#gaugeGrad)" stroke-width="16" stroke-linecap="round" />
+          </svg>
+          <div class="gauge-value" id="gauge-value">—</div>
+          <div class="gauge-caption">probability of heart disease</div>
+        </div>
+
+        <div class="verdict idle" id="verdict">Awaiting input</div>
+        <div class="prob-bar"><span id="prob-bar"></span></div>
+        <div class="result-meta" id="result-meta">
+          Submit the form to score the patient. The Live Simulation tab will then animate the exact maths behind this prediction.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- SECTION 2: LIVE SIMULATION                                    -->
+  <!-- ============================================================ -->
+  <section id="simulation" class="panel">
+    <div class="eyebrow">Step 2 · Live simulation</div>
+    <div style="display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;align-items:flex-end;">
+      <div>
+        <h1 style="font-size:1.65rem;">What the model actually does</h1>
+        <p class="lead">
+          Every number below is computed live from the trained pipeline for the patient you just
+          submitted: real standardised inputs, real learned coefficients, real logit and sigmoid.
+          Nothing here is decorative.
+        </p>
+      </div>
+      <div style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;">
+        <div class="variant-toggle" id="variant-toggle">
+          {% for v in available_variants %}
+          <button data-variant="{{ v }}">{{ variant_labels.get(v, v) }}</button>
+          {% endfor %}
+        </div>
+        <button class="ghost" id="replay-btn" disabled>Replay animation</button>
+      </div>
+    </div>
+
+    <div class="steps" id="steps">
+      <div class="step-chip" data-step="1"><span class="num">1</span> Standardised inputs</div>
+      <div class="step-chip" data-step="2"><span class="num">2</span> Equation term by term</div>
+      <div class="step-chip" data-step="3"><span class="num">3</span> Ridge dampening</div>
+      <div class="step-chip" data-step="4"><span class="num">4</span> Lasso dropout</div>
+      <div class="step-chip" data-step="5"><span class="num">5</span> Sigmoid</div>
+      <div class="step-chip" data-step="6"><span class="num">6</span> Verdict</div>
+    </div>
+
+    <div class="placeholder" id="sim-placeholder">
+      <div class="big">⏳ Waiting for a patient</div>
+      <div>Go to <b>Home</b>, enter the vitals and press <b>Predict risk</b>. The full computation will animate here.</div>
+    </div>
+
+    <div class="sim-grid" id="sim-body" style="display:none;">
+
+      <!-- Step 1 -->
+      <div class="card sim-card" id="sim-1">
+        <h3><span class="tag">Step 1</span> Standardised inputs feeding the model</h3>
+        <p class="note">
+          Continuous features are <b>standardised</b> (z = (x − μ) / σ) using the values learned during
+          training. Centring at zero makes Ridge and Lasso penalise every coefficient on a fair scale.
+        </p>
+        <div class="rows" id="standardised-rows"></div>
+      </div>
+
+      <!-- Step 2 -->
+      <div class="card sim-card" id="sim-2">
+        <h3><span class="tag">Step 2</span> Logistic regression equation, term by term</h3>
+        <p class="note">
+          Each transformed feature is multiplied by its learned coefficient β. Terms accumulate into the
+          logit (log-odds), shown as a running total on the right.
+        </p>
+        <div class="equation" id="equation"></div>
+        <div class="total">
+          <span>Final logit &nbsp;(intercept + Σ βᵢ·xᵢ)</span>
+          <b id="logit-total">—</b>
+        </div>
+      </div>
+
+      <!-- Step 3 -->
+      <div class="card sim-card" id="sim-3">
+        <h3><span class="tag">Step 3</span> Ridge (L2): coefficients dampened toward zero</h3>
+        <p class="note">
+          The faint outline is each coefficient's magnitude in the <b>unpenalised</b> baseline model; the
+          solid bar is the <b>Ridge</b> coefficient. L2 shrinks large weights smoothly but never removes a feature.
+        </p>
+        <div class="rows" id="ridge-rows"></div>
+        <div class="total">
+          <span>Ridge shrinks total coefficient magnitude to</span>
+          <b id="ridge-shrink">—</b>
+        </div>
+      </div>
+
+      <!-- Step 4 -->
+      <div class="card sim-card" id="sim-4">
+        <h3><span class="tag">Step 4</span> Lasso (L1): weak features dropped to exactly zero</h3>
+        <p class="note">
+          L1 drives unimportant coefficients to <b>exactly 0</b>. Features that hit zero fade out — that is
+          Lasso performing feature selection inside the model.
+        </p>
+        <div class="rows" id="lasso-rows"></div>
+        <div class="total">
+          <span>Features kept by Lasso</span>
+          <b id="lasso-kept">—</b>
+        </div>
+      </div>
+
+      <!-- Step 5 -->
+      <div class="card sim-card" id="sim-5">
+        <h3><span class="tag">Step 5</span> The logit passes through the sigmoid</h3>
+        <p class="note">
+          σ(z) = 1 / (1 + e<sup>−z</sup>) squashes the weighted sum into a probability between 0 and 1.
+          The dot lands at the current patient's logit.
+        </p>
+        <div class="sig-wrap" id="sig-wrap">
+          <svg class="sig-svg" id="sig-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="sigGrad" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stop-color="#1d4ed8" />
+                <stop offset="100%" stop-color="#d81f36" />
+              </linearGradient>
+            </defs>
+            <path class="curve" id="sig-curve" d="" pathLength="1" vector-effect="non-scaling-stroke" />
+          </svg>
+          <div class="sig-guide-v" id="sig-guide-v" style="left:0%"></div>
+          <div class="sig-guide-h" id="sig-guide-h" style="top:100%"></div>
+          <div class="sig-dot" id="sig-dot" style="left:0%;top:100%"></div>
+          <div class="sig-labels">
+            <span>logit = −8</span><span>0</span><span>logit = +8</span>
+          </div>
+        </div>
+        <div class="sig-readout">
+          <div>Logit z<b id="sig-logit">—</b></div>
+          <div>Probability σ(z)<b id="sig-prob">—</b></div>
+          <div>Odds<b id="sig-odds">—</b></div>
+        </div>
+      </div>
+
+      <!-- Step 6 -->
+      <div class="card sim-card" id="sim-6">
+        <h3><span class="tag">Step 6</span> Probability animates into the verdict</h3>
+        <p class="note">
+          The probability is compared with the decision threshold to produce the class shown on the Home section.
+        </p>
+        <div style="display:flex;align-items:center;gap:1.2rem;flex-wrap:wrap;">
+          <div style="flex:1;min-width:220px;">
+            <div class="prob-bar" style="margin-top:0;height:12px;"><span id="sim-prob-bar"></span></div>
+            <div class="result-meta" id="sim-verdict-meta">—</div>
+          </div>
+          <div class="verdict low" id="sim-verdict" style="margin-top:0;">—</div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- SECTION 3: ABOUT US                                          -->
+  <!-- ============================================================ -->
+  <section id="about" class="panel about">
+    <div class="eyebrow">Step 3 · About us</div>
+    <h1 style="font-size:1.65rem;">Heart Disease Prediction Using Ridge- and Lasso-Regularized Logistic Regression</h1>
+
+    <div class="about-grid" style="margin-top:1.5rem;">
+      <div class="card reveal">
+        <h2>Abstract</h2>
+        <p class="lead" style="max-width:none;">
+          Heart disease is one of the leading causes of death worldwide, making early prediction and risk
+          assessment important for timely medical intervention. This project develops a machine learning-based
+          heart disease prediction system using Logistic Regression enhanced with Ridge and Lasso regularization,
+          analyzing patient attributes such as age, blood pressure, cholesterol, heart rate, and other clinical
+          factors. Ridge regularization reduces overfitting by controlling coefficient magnitude, while Lasso
+          performs feature selection by shrinking less significant coefficients to zero. The system is designed
+          as a predictive aid to support healthcare professionals, not a replacement for clinical diagnosis.
+        </p>
+      </div>
+
+      <div class="card reveal">
+        <h2>Team details</h2>
+        <div class="team-member">
+          <div class="avatar">JS</div>
+          <div><b>J Simran</b><div class="muted" style="font-size:.8rem;">2520030166</div></div>
+        </div>
+        <div class="team-member">
+          <div class="avatar">KA</div>
+          <div><b>K Anusri</b><div class="muted" style="font-size:.8rem;">2520030432</div></div>
+        </div>
+
+        <div class="kv" style="margin-top:1rem;">
+          <div><span>Team Number</span><span>20</span></div>
+          <div><span>Section</span><span>9</span></div>
+          <div><span>Guide</span><span>M Rani, CSE Department</span></div>
+          <div><span>Course</span><span>Machine Learning (25SC2107E), A.Y. 2026-2027</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card reveal" style="margin-top:1.25rem;">
+      <h2>Institution</h2>
+      <p class="lead" style="max-width:none;">
+        KLH University (Deemed to be University), Bachupally, Hyderabad-500090, Telangana, India
+      </p>
+    </div>
+  </section>
+
+  <div id="js-error" role="alert"
+       style="display:none;position:fixed;left:50%;transform:translateX(-50%);bottom:18px;z-index:80;
+              background:#fff5f6;border:1px solid var(--danger);color:#a8162a;border-radius:12px;
+              padding:.6rem 1rem;font-size:.82rem;box-shadow:var(--shadow);max-width:90vw;"></div>
+
+  <footer class="foot">
+    Model v{{ model_version }} · {% if primary_variant %}<span class="mono">{{ variant_labels.get(primary_variant, primary_variant) }}</span> selected on test ROC-AUC
+    {% if metrics %}· ROC-AUC {{ '%.3f'|format(metrics.get('roc_auc', 0)) }}{% endif %}{% endif %}.
+    For research and decision support only — not a diagnostic device.
+  </footer>
+</main>
+
+<script>
+/* =====================================================================
+   Application state + helpers
+   ===================================================================== */
+const FEATURE_LABELS = {
+  age: 'Age', resting_bp: 'Resting BP', cholesterol: 'Cholesterol',
+  max_heart_rate: 'Max heart rate', st_depression: 'ST depression',
+  age_chol: 'Age × Cholesterol',
+  sex_0: 'Sex · Female', sex_1: 'Sex · Male',
+  chest_pain_type_1: 'Chest pain · typical angina',
+  chest_pain_type_2: 'Chest pain · atypical angina',
+  chest_pain_type_3: 'Chest pain · non-anginal',
+  chest_pain_type_4: 'Chest pain · asymptomatic',
+  fasting_blood_sugar_0: 'Fasting BS ≤ 120', fasting_blood_sugar_1: 'Fasting BS > 120',
+  resting_ecg_0: 'ECG · normal', resting_ecg_1: 'ECG · ST-T abnormality', resting_ecg_2: 'ECG · LV hypertrophy',
+  exercise_angina_0: 'No exercise angina', exercise_angina_1: 'Exercise angina',
+  st_slope_1: 'Slope · upsloping', st_slope_2: 'Slope · flat', st_slope_3: 'Slope · downsloping',
+  num_major_vessels_0: 'Vessels · 0', num_major_vessels_1: 'Vessels · 1',
+  num_major_vessels_2: 'Vessels · 2', num_major_vessels_3: 'Vessels · 3',
+  thalassemia_3: 'Thal · normal', thalassemia_6: 'Thal · fixed defect', thalassemia_7: 'Thal · reversible defect',
+};
+const pretty = (name) => FEATURE_LABELS[name] || name.replace(/_/g, ' ');
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const fmt = (n, d = 3) => (n === null || n === undefined || Number.isNaN(n)) ? '—' : Number(n).toFixed(d);
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+const state = {
+  data: null,          // /explain payload
+  variant: null,       // variant currently visualised
+  run: 0,              // token used to cancel stale animation runs
+};
+
+/* =====================================================================
+   Navigation: smooth scroll + scroll-spy
+   ===================================================================== */
+const tabs = Array.from(document.querySelectorAll('#tabs button'));
+tabs.forEach((button) => {
+  button.addEventListener('click', () => {
+    const target = document.getElementById(button.dataset.target);
+    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+});
+
+function setActiveTab(id) {
+  tabs.forEach((b) => b.classList.toggle('active', b.dataset.target === id));
+}
+
+const spy = new IntersectionObserver((entries) => {
+  entries.forEach((entry) => { if (entry.isIntersecting) setActiveTab(entry.target.id); });
+}, { rootMargin: '-45% 0px -50% 0px', threshold: 0 });
+['home', 'simulation', 'about'].forEach((id) => {
+  const el = document.getElementById(id);
+  if (el) spy.observe(el);
+});
+
+// Reveal-on-scroll for cards
+const revealObserver = new IntersectionObserver((entries) => {
+  entries.forEach((entry) => { if (entry.isIntersecting) entry.target.classList.add('in'); });
+}, { threshold: 0.12 });
+document.querySelectorAll('.reveal').forEach((el) => revealObserver.observe(el));
+
+/* =====================================================================
+   Home: form, submission, result card
+   ===================================================================== */
+const form = document.getElementById('patient-form');
+const errorEl = document.getElementById('error');
+const submitBtn = document.getElementById('submit-btn');
+const gaugeFill = document.getElementById('gauge-fill');
+const gaugeValue = document.getElementById('gauge-value');
+const verdictEl = document.getElementById('verdict');
+const probBar = document.getElementById('prob-bar');
+const resultMeta = document.getElementById('result-meta');
+
+const GAUGE_LENGTH = gaugeFill.getTotalLength();
+gaugeFill.style.strokeDasharray = String(GAUGE_LENGTH);
+gaugeFill.style.strokeDashoffset = String(GAUGE_LENGTH);
+
+const DEMO_PATIENT = {
+  age: 57, sex: 1, chest_pain_type: 4, resting_bp: 140, cholesterol: 260,
+  fasting_blood_sugar: 0, resting_ecg: 1, max_heart_rate: 140, exercise_angina: 1,
+  st_depression: 2.0, st_slope: 2, num_major_vessels: 2, thalassemia: 7,
+};
+
+document.getElementById('demo-btn').addEventListener('click', () => fillForm(DEMO_PATIENT));
+document.getElementById('reset-btn').addEventListener('click', () => {
+  form.reset();
+  document.getElementById('threshold').value = '0.50';
+  errorEl.textContent = '';
+});
+
+function fillForm(values) {
+  Object.entries(values).forEach(([key, value]) => {
+    const input = form.elements[key];
+    if (input) input.value = value;
+  });
+}
+
+function collectRecord() {
+  const record = {};
+  new FormData(form).forEach((value, key) => {
+    if (key === 'threshold') return;
+    record[key] = Number(value);
+  });
+  return record;
+}
+
+/** Animate a number from its current displayed value up/down to `to`. */
+function animateNumber(element, to, decimals, duration = 900, suffix = '') {
+  const from = parseFloat(element.dataset.raw || '0') || 0;
+  const start = performance.now();
+  element.dataset.raw = String(to);
+  function frame(now) {
+    const t = clamp((now - start) / duration, 0, 1);
+    const eased = 1 - Math.pow(1 - t, 3);
+    element.textContent = (from + (to - from) * eased).toFixed(decimals) + suffix;
+    if (t < 1) requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+}
+
+function renderResult(verdict) {
+  const isHigh = verdict.prediction === 1;
+  probBar.style.width = clamp(verdict.risk_percent, 0, 100) + '%';
+  gaugeFill.style.strokeDashoffset = String(GAUGE_LENGTH * (1 - clamp(verdict.probability, 0, 1)));
+  animateNumber(gaugeValue, verdict.risk_percent, 1, 950, '%');
+  verdictEl.textContent = (isHigh ? '🟥 ' : '🟩 ') + verdict.label;
+  verdictEl.className = 'verdict ' + (isHigh ? 'high' : 'low');
+  resultMeta.textContent =
+    'Probability ' + verdict.probability.toFixed(3) +
+    ' · threshold ' + verdict.threshold +
+    ' · model ' + verdict.variant_label;
+}
+
+form.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  errorEl.textContent = '';
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Scoring…';
+
+  const record = collectRecord();
+  const threshold = Number(document.getElementById('threshold').value || 0.5);
+
+  try {
+    const response = await fetch('/explain', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ features: record, threshold }),
+    });
+    const payload = await response.json();
+
+    if (!response.ok) {
+      errorEl.textContent = payload.error + ' ' + (payload.details ? payload.details.join(' ') : '');
+      return;
+    }
+
+    state.data = payload;
+    state.variant = payload.primary;
+    syncVariantToggle();
+    renderResult(payload.verdict);
+    await runSimulation();
+    document.getElementById('simulation').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (err) {
+    errorEl.textContent = 'Request failed: ' + err.message;
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Predict risk';
+  }
+});
+
+/* =====================================================================
+   Live Simulation
+   ===================================================================== */
+const simBody = document.getElementById('sim-body');
+const simPlaceholder = document.getElementById('sim-placeholder');
+const replayBtn = document.getElementById('replay-btn');
+const toggle = document.getElementById('variant-toggle');
+const sigWrap = document.getElementById('sig-wrap');
+const sigCurve = document.getElementById('sig-curve');
+const sigDot = document.getElementById('sig-dot');
+const sigGuideV = document.getElementById('sig-guide-v');
+const sigGuideH = document.getElementById('sig-guide-h');
+
+document.getElementById('sig-svg').classList.remove('draw');
+
+toggle.addEventListener('click', (event) => {
+  const button = event.target.closest('button[data-variant]');
+  if (!button || !state.data) return;
+  state.variant = button.dataset.variant;
+  syncVariantToggle();
+  runSimulation();
+});
+
+function syncVariantToggle() {
+  toggle.querySelectorAll('button[data-variant]').forEach((b) => {
+    b.classList.toggle('active', b.dataset.variant === state.variant);
+    b.disabled = !state.data || !state.data.variants[b.dataset.variant];
+  });
+}
+
+replayBtn.addEventListener('click', () => { if (state.data) runSimulation(); });
+
+function setStep(step, status) {
+  const chip = document.querySelector('.step-chip[data-step="' + step + '"]');
+  if (!chip) return;
+  chip.classList.toggle('active', status === 'active');
+  chip.classList.toggle('done', status === 'done');
+}
+
+function clearSteps() {
+  document.querySelectorAll('.step-chip').forEach((c) => c.classList.remove('active', 'done'));
+}
+
+function currentExplanation() {
+  if (!state.data) return null;
+  return state.data.variants[state.variant] || null;
+}
+
+/** Build a bar row: label | track(with signed fill) | value. */
+function buildRow(name, value, maxAbs, options = {}) {
+  const row = document.createElement('div');
+  row.className = 'row';
+
+  const label = document.createElement('div');
+  label.className = 'name';
+  label.innerHTML = pretty(name) + (options.dropPill ? '<span class="drop-pill">dropped</span>' : '');
+
+  const track = document.createElement('div');
+  track.className = 'track';
+  if (options.withAxis !== false) {
+    const axis = document.createElement('div');
+    axis.className = 'axis';
+    track.appendChild(axis);
+  }
+  if (options.ghostMagnitude) {
+    const ghost = document.createElement('div');
+    ghost.className = 'ghost-bar';
+    track.appendChild(ghost);
+    options.ghost = ghost;
+  }
+  const fill = document.createElement('div');
+  fill.className = 'fill ' + (value >= 0 ? 'pos' : 'neg');
+  track.appendChild(fill);
+
+  const val = document.createElement('div');
+  val.className = 'val';
+  val.textContent = fmt(value, 3);
+
+  row.append(label, track, val);
+  return { row, fill, ghost: options.ghost || null, value, maxAbs };
+}
+
+/** Animate a set of bar rows by setting widths (call after DOM insertion). */
+function paintRows(rows, formatter) {
+  requestAnimationFrame(() => {
+    rows.forEach(({ fill, ghost, value, maxAbs }) => {
+      const pct = maxAbs > 0 ? (Math.abs(value) / maxAbs) * 50 : 0;
+      fill.style.width = pct + '%';
+      fill.style.left = value >= 0 ? '50%' : (50 - pct) + '%';
+      fill.style.opacity = Math.abs(value) < 1e-9 ? '0' : '1';
+      if (ghost) ghost.style.width = (Math.abs(formatter ? formatter(value) : value) / maxAbs) * 50 + '%';
+    });
+  });
+}
+
+/* ---------- Step 1: standardised inputs ---------- */
+function renderStandardised(explanation) {
+  const container = document.getElementById('standardised-rows');
+  container.innerHTML = '';
+  const items = explanation.standardized || [];
+  const maxAbs = Math.max(1e-6, ...items.map((i) => Math.abs(i.value)));
+  const rows = items.map((item) => {
+    const built = buildRow(item.name, item.value, maxAbs, { withAxis: true });
+    built.row.querySelector('.name').innerHTML =
+      pretty(item.name) + ' <span class="muted">(raw ' + fmt(item.raw, 1) + ')</span>';
+    container.appendChild(built.row);
+    return built;
+  });
+  paintRows(rows);
+}
+
+/* ---------- Step 2: equation ---------- */
+async function renderEquation(explanation, run) {
+  const container = document.getElementById('equation');
+  container.innerHTML = '';
+
+  const features = explanation.features.slice().sort(
+    (a, b) => Math.abs(b.contribution) - Math.abs(a.contribution)
+  );
+  const head = features.slice(0, 10);
+  const rest = features.slice(10);
+  const restSum = rest.reduce((sum, f) => sum + f.contribution, 0);
+
+  let running = 0;
+  const terms = [];
+
+  const makeTerm = (html) => {
+    const el = document.createElement('div');
+    el.className = 'term';
+    el.innerHTML = html;
+    container.appendChild(el);
+    return el;
+  };
+
+  for (const feature of head) {
+    const el = makeTerm(
+      '<span class="lhs"><b>' + pretty(feature.name) + '</b> &nbsp;' +
+      fmt(feature.value, 3) + ' × <span class="mono">β</span> ' + fmt(feature.coefficient, 3) + '</span>' +
+      '<span class="prod">= ' + fmt(feature.contribution, 3) + '</span>' +
+      '<span class="run">—</span>'
+    );
+    terms.push({ el, contribution: feature.contribution });
+  }
+
+  if (rest.length) {
+    const el = makeTerm(
+      '<span class="lhs"><b>' + rest.length + ' more terms</b> <span class="muted">(smaller contributions)</span></span>' +
+      '<span class="prod">Σ = ' + fmt(restSum, 3) + '</span>' +
+      '<span class="run">—</span>'
+    );
+    terms.push({ el, contribution: restSum, showZero: true });
+  }
+
+  const totalEl = document.getElementById('logit-total');
+  totalEl.textContent = '—';
+  totalEl.dataset.raw = '0';
+
+  for (const term of terms) {
+    if (run !== state.run) return;
+    term.el.classList.add('show');
+    running += term.contribution;
+    const runEl = term.el.querySelector('.run');
+    if (!term.showZero) {
+      runEl.textContent = (running >= 0 ? '+' : '') + fmt(running, 3);
+      runEl.className = 'run ' + (running >= 0 ? 'pos' : 'neg');
+    } else {
+      runEl.textContent = '…';
+      runEl.className = 'run';
+    }
+    term.el.classList.add('bump');
+    setTimeout(() => term.el.classList.remove('bump'), 420);
+    await sleep(230);
+  }
+
+  if (run !== state.run) return;
+  const finalLogit = explanation.intercept + features.reduce((s, f) => s + f.contribution, 0);
+  animateNumber(totalEl, finalLogit, 3, 600);
+}
+
+/* ---------- Step 3: Ridge ---------- */
+function renderRidge(variants) {
+  const container = document.getElementById('ridge-rows');
+  container.innerHTML = '';
+  const ridge = variants.ridge_l2;
+  const baseline = variants.baseline;
+  if (!ridge) { container.innerHTML = '<p class="muted">Ridge variant not available.</p>'; return null; }
+
+  const baselineByName = {};
+  if (baseline) baseline.features.forEach((f) => { baselineByName[f.name] = f; });
+
+  const maxAbs = Math.max(1e-6,
+    ...ridge.features.map((f) => Math.abs(f.coefficient)),
+    ...Object.values(baselineByName).map((f) => Math.abs(f.coefficient || 0)));
+
+  const rows = ridge.features.slice()
+    .sort((a, b) => Math.abs(b.coefficient) - Math.abs(a.coefficient))
+    .map((feature) => {
+      const ghostValue = baselineByName[feature.name] ? baselineByName[feature.name].coefficient : 0;
+      const built = buildRow(feature.name, feature.coefficient, maxAbs,
+        { ghostMagnitude: true, withAxis: true });
+      container.appendChild(built.row);
+      return { built, ghostValue };
+    });
+
+  requestAnimationFrame(() => {
+    rows.forEach(({ built, ghostValue }) => {
+      const pct = (Math.abs(built.value) / maxAbs) * 50;
+      built.fill.style.width = pct + '%';
+      built.fill.style.left = built.value >= 0 ? '50%' : (50 - pct) + '%';
+      if (built.ghost) built.ghost.style.width = (Math.abs(ghostValue) / maxAbs) * 50 + '%';
+    });
+  });
+
+  const ridgeTotal = ridge.features.reduce((s, f) => s + Math.abs(f.coefficient), 0);
+  const baseTotal = Object.values(baselineByName).reduce((s, f) => s + Math.abs(f.coefficient || 0), 0);
+  const ratio = baseTotal > 0 ? (ridgeTotal / baseTotal) * 100 : 100;
+  return ratio;
+}
+
+/* ---------- Step 4: Lasso ---------- */
+function renderLasso(variants) {
+  const container = document.getElementById('lasso-rows');
+  container.innerHTML = '';
+  const lasso = variants.lasso_l1;
+  if (!lasso) { container.innerHTML = '<p class="muted">Lasso variant not available.</p>'; return null; }
+
+  const maxAbs = Math.max(1e-6, ...lasso.features.map((f) => Math.abs(f.coefficient)));
+  const sorted = lasso.features.slice().sort((a, b) => Math.abs(b.coefficient) - Math.abs(a.coefficient));
+
+  const rows = sorted.map((feature) => {
+    const isZero = Math.abs(feature.coefficient) < 1e-8;
+    const built = buildRow(feature.name, feature.coefficient, maxAbs,
+      { withAxis: true, dropPill: isZero });
+    if (isZero) built.row.classList.add('dropped');
+    container.appendChild(built.row);
+    return built;
+  });
+
+  // Animate: non-zero bars grow; zeroed features fade their (empty) bar out.
+  requestAnimationFrame(() => {
+    rows.forEach(({ fill, value, row }) => {
+      const isZero = Math.abs(value) < 1e-8;
+      const pct = (Math.abs(value) / maxAbs) * 50;
+      fill.style.width = pct + '%';
+      fill.style.left = value >= 0 ? '50%' : (50 - pct) + '%';
+      fill.style.opacity = isZero ? '0' : '1';
+      if (isZero) row.classList.add('dropped');
+    });
+  });
+
+  return { kept: lasso.n_selected, total: lasso.n_total, zeroed: lasso.n_zeroed };
+}
+
+/* ---------- Step 5: sigmoid ---------- */
+function buildSigmoidPath() {
+  const X_MIN = -8, X_MAX = 8;
+  const toX = (z) => ((z - X_MIN) / (X_MAX - X_MIN)) * 100;
+  const toY = (p) => (1 - p) * 100;
+  let d = '';
+  for (let z = X_MIN; z <= X_MAX + 1e-9; z += 0.25) {
+    const p = 1 / (1 + Math.exp(-z));
+    d += (d === '' ? 'M' : 'L') + toX(z).toFixed(3) + ' ' + toY(p).toFixed(3) + ' ';
+  }
+  return d;
+}
+sigCurve.setAttribute('d', buildSigmoidPath());
+
+function renderSigmoid(explanation) {
+  const X_MIN = -8, X_MAX = 8;
+  const z = clamp(explanation.logit, X_MIN, X_MAX);
+  const p = explanation.probability;
+  const leftPct = clamp(((z - X_MIN) / (X_MAX - X_MIN)) * 100, 0, 100);
+  const topPct = clamp((1 - p) * 100, 0, 100);
+
+  document.getElementById('sig-svg').classList.remove('draw');
+  // reset to origin, then let CSS transitions animate to the target
+  sigDot.style.left = '0%'; sigDot.style.top = '100%';
+  sigGuideV.style.left = '0%'; sigGuideH.style.top = '100%';
+
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      sigDot.style.left = leftPct + '%'; sigDot.style.top = topPct + '%';
+      sigGuideV.style.left = leftPct + '%'; sigGuideH.style.top = topPct + '%';
+      document.getElementById('sig-svg').classList.add('draw');
+    });
+  });
+
+  animateNumber(document.getElementById('sig-logit'), explanation.logit, 3, 900);
+  const probEl = document.getElementById('sig-prob');
+  probEl.dataset.raw = '0';
+  animateNumber(probEl, p, 4, 1100);
+
+  const odds = p >= 1 ? Infinity : p / (1 - p);
+  document.getElementById('sig-odds').textContent = isFinite(odds) ? fmt(odds, 2) + ' : 1' : '∞';
+}
+
+/* ---------- Step 6: verdict ---------- */
+function renderSimVerdict(explanation) {
+  const isHigh = explanation.prediction === 1;
+  const bar = document.getElementById('sim-prob-bar');
+  bar.style.width = clamp(explanation.probability * 100, 0, 100) + '%';
+  const verdict = document.getElementById('sim-verdict');
+  verdict.textContent = (isHigh ? '🟥 ' : '🟩 ') + (isHigh ? 'Disease present' : 'No disease');
+  verdict.className = 'verdict ' + (isHigh ? 'high' : 'low');
+  document.getElementById('sim-verdict-meta').textContent =
+    'σ(z) = ' + explanation.probability.toFixed(4) +
+    ' compared with threshold ' + state.data.threshold +
+    ' → class ' + explanation.prediction + ' (' + pretty(explanation.variant) + ')';
+}
+
+/* ---------- Orchestrator ---------- */
+async function runSimulation() {
+  if (!state.data) return;
+  const run = ++state.run;
+  const explanation = currentExplanation();
+  if (!explanation) return;
+
+  simPlaceholder.style.display = 'none';
+  simBody.style.display = 'grid';
+  replayBtn.disabled = false;
+  clearSteps();
+  document.getElementById('logit-total').textContent = '—';
+  document.getElementById('ridge-shrink').textContent = '—';
+  document.getElementById('lasso-kept').textContent = '—';
+  document.getElementById('sig-logit').textContent = '—';
+  document.getElementById('sig-prob').textContent = '—';
+  document.getElementById('sig-odds').textContent = '—';
+  document.getElementById('sim-prob-bar').style.width = '0%';
+
+  setStep(1, 'active');
+  renderStandardised(explanation);
+  await sleep(1000);
+  if (run !== state.run) return;
+  setStep(1, 'done');
+
+  setStep(2, 'active');
+  await renderEquation(explanation, run);
+  if (run !== state.run) return;
+  setStep(2, 'done');
+  await sleep(250);
+  if (run !== state.run) return;
+
+  setStep(3, 'active');
+  const shrink = renderRidge(state.data.variants);
+  document.getElementById('ridge-shrink').textContent =
+    shrink === null ? '—' : shrink.toFixed(1) + '% of baseline magnitude';
+  await sleep(1100);
+  if (run !== state.run) return;
+  setStep(3, 'done');
+
+  setStep(4, 'active');
+  const lasso = renderLasso(state.data.variants);
+  document.getElementById('lasso-kept').textContent =
+    lasso === null ? '—' : lasso.kept + ' of ' + lasso.total + ' (dropped ' + lasso.zeroed + ')';
+  await sleep(1100);
+  if (run !== state.run) return;
+  setStep(4, 'done');
+
+  setStep(5, 'active');
+  renderSigmoid(explanation);
+  await sleep(1250);
+  if (run !== state.run) return;
+  setStep(5, 'done');
+
+  setStep(6, 'active');
+  renderSimVerdict(explanation);
+  // Sync the Home result card too, so both sections agree.
+  renderResult(state.data.verdict);
+  await sleep(600);
+  if (run !== state.run) return;
+  setStep(6, 'done');
+}
+
+/* =====================================================================
+   Uncaught-error surface: fail loudly in the UI instead of silently
+   ===================================================================== */
+const jsError = document.getElementById('js-error');
+window.addEventListener('error', (event) => {
+  jsError.style.display = 'block';
+  jsError.textContent = '⚠ ' + (event.message || 'Unexpected error');
+});
+window.addEventListener('unhandledrejection', (event) => {
+  jsError.style.display = 'block';
+  jsError.textContent = '⚠ ' + ((event.reason && event.reason.message) || 'Unexpected error');
+});
+
+/* initial visual state */
+syncVariantToggle();
+
+/* Shareable demo link: /?demo=1 pre-fills the example patient and runs it. */
+if (new URLSearchParams(window.location.search).get('demo') === '1') {
+  fillForm(DEMO_PATIENT);
+  form.requestSubmit();
+}
+</script>
+</body>
+</html>

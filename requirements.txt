@@ -1,0 +1,25 @@
+# Core data / ML stack
+numpy>=2.1
+pandas>=2.2
+# NOTE: scipy 1.18.x ships _distance_pybind which some Windows Application
+# Control policies block. 1.16/1.17 are known-good on this machine.
+scipy>=1.15,<1.18
+# NOTE: scikit-learn 1.8+/1.9 wheels are blocked by the same Application
+# Control policy on this machine; 1.7.x is known-good.
+scikit-learn>=1.6,<1.8
+joblib>=1.4
+
+# Visualization
+matplotlib>=3.9
+seaborn>=0.13
+
+# Deployment
+flask>=3.0
+streamlit>=1.39
+requests>=2.32
+
+# Notebook + testing
+jupyter>=1.1
+nbformat>=5.10
+ipykernel>=6.29
+pytest>=8.3

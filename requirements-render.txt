@@ -1,0 +1,30 @@
+# Runtime-only dependencies for the deployed Flask service (see render.yaml).
+#
+# Two things are deliberate here:
+#
+# 1. This file is much narrower than requirements.txt. Nothing on the request
+#    path imports matplotlib, seaborn, streamlit, jupyter or pytest
+#    (`app/flask_app.py` -> src.config / src.explain / src.predict
+#                     -> src.preprocessing), so leaving them out keeps the
+#    Render build small and fast and removes a whole class of build failures.
+#
+# 2. The versions are pinned *exactly* to the stack the test suite passes
+#    against locally (Python 3.14.3, see .python-version). Ranges would let a
+#    fresh deploy resolve to a different pandas/scipy than the one that was
+#    tested; a deploy is the one place you want the bytes you validated.
+#    To upgrade: bump the pin, run `python -m pytest`, then redeploy.
+#
+# Use requirements.txt for local development, training, the notebook and the
+# Streamlit UI.
+
+# Core data / ML stack
+numpy==2.5.3
+pandas==3.0.6
+scipy==1.16.3
+scikit-learn==1.7.2
+joblib==1.6.0
+
+# Web service + WSGI server (Render's start command runs `gunicorn wsgi:app`).
+# gunicorn is Linux/macOS only and is not installed locally on Windows.
+flask==3.1.3
+gunicorn==26.2.0
