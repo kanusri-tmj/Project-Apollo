@@ -43,7 +43,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from flask import Flask, jsonify, render_template, request  # noqa: E402
+from flask import Flask, jsonify, render_template, request, send_from_directory  # noqa: E402
 
 from src import config, explain, predict  # noqa: E402
 
@@ -317,6 +317,19 @@ def model_info():
                 for variant in MODELS
             },
         }
+    )
+
+
+@app.get("/favicon.ico")
+def favicon():
+    """Serve the icon at the path browsers request unprompted.
+
+    The page also declares the icons explicitly, but every browser still asks for
+    ``/favicon.ico`` on its own. Without this route that request 404s on each
+    page load and fills the production logs with noise.
+    """
+    return send_from_directory(
+        app.static_folder, "favicon.ico", mimetype="image/vnd.microsoft.icon"
     )
 
 

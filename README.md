@@ -66,7 +66,10 @@ pre-fills an example patient, scores it, and scrolls to the simulation.
 ├── app/
 │   ├── flask_app.py            # REST API + 3-section website
 │   ├── streamlit_app.py        # Streamlit clinician UI (+ batch scoring)
-│   └── templates/index.html    # Home / Live Simulation / About Us
+│   ├── templates/index.html    # Home / Live Simulation / About Us
+│   └── static/                 # favicon.svg (source), favicon.ico, apple-touch-icon.png
+├── tools/
+│   └── make_icons.py           # rasterises the SVG icon into .ico + apple touch icon
 ├── notebooks/
 │   └── heart_disease_analysis.ipynb   # the 11-step walkthrough
 ├── tests/                      # pytest suite (80 tests, incl. deployment contract)

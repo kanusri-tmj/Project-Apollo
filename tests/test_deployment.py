@@ -80,6 +80,18 @@ def test_readme_images_are_not_gitignored():
         )
 
 
+def test_static_assets_are_not_gitignored():
+    """An ignored favicon exists locally and is simply absent in production."""
+    rules = _gitignore_rules()
+    for asset in (
+        "app/static/favicon.svg",
+        "app/static/favicon.ico",
+        "app/static/apple-touch-icon.png",
+    ):
+        assert (PROJECT_ROOT / asset).exists(), f"missing static asset: {asset}"
+        assert not _is_ignored(asset, rules), f"{asset} is gitignored, so it would 404 on Render"
+
+
 def test_dataset_snapshots_are_not_required_at_runtime():
     """The pip-installed service must not depend on generated data files."""
     rules = _gitignore_rules()
