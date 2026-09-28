@@ -1,7 +1,7 @@
 {
   "name": "baseline",
   "version": "1.0.0",
-  "created_utc": "2026-09-26T06:26:33.768523+00:00",
+  "created_utc": "2026-09-28T03:23:49.043367+00:00",
   "metadata": {
     "variant": "baseline",
     "label": "Plain logistic regression",
@@ -9,7 +9,9 @@
       "accuracy": 0.8852459016393442,
       "precision": 0.8387096774193549,
       "recall": 0.9285714285714286,
+      "specificity": 0.8484848484848485,
       "f1": 0.8813559322033898,
+      "mcc": 0.7745455878531639,
       "roc_auc": 0.961038961038961,
       "threshold": 0.5
     },

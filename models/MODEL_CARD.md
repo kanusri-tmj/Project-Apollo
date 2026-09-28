@@ -1,8 +1,8 @@
 # Model Card — Heart Disease Risk (Logistic Regression, Ridge (L2))
 
 **Version:** `1.0.0`
-**Artifact:** `ridge_l2_v1.0.0_20260926T062633Z.joblib`
-**Generated:** 2026-09-26T06:26:33.814108+00:00
+**Artifact:** `ridge_l2_v1.0.0_20260928T032349Z.joblib`
+**Generated:** 2026-09-28T03:23:49.107203+00:00
 
 ## Intended use
 Decision-support for clinicians: estimate the probability that a patient has
@@ -22,7 +22,9 @@ clinician alongside the full clinical picture.
 | accuracy | 0.9016 |
 | precision | 0.8667 |
 | recall | 0.9286 |
+| specificity | 0.8788 |
 | f1 | 0.8966 |
+| mcc | 0.8048 |
 | roc_auc | 0.9654 |
 | threshold | 0.5000 |
 

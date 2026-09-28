@@ -12,6 +12,7 @@ drift from the code.
 from __future__ import annotations
 
 import fnmatch
+import re
 import subprocess
 import sys
 import textwrap
@@ -60,6 +61,23 @@ def test_timestamped_artifacts_stay_out_of_git():
     """The immutable audit trail is a duplicate copy and should not be committed."""
     rules = _gitignore_rules()
     assert _is_ignored("models/ridge_l2_v1.0.0_20260926T062633Z.joblib", rules)
+
+
+def test_readme_images_are_not_gitignored():
+    """A gitignored screenshot or figure renders as a broken image on GitHub."""
+    readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
+    embedded = re.findall(r"!\[[^\]]*\]\(([^)\s]+)", readme)
+    assert embedded, "README embeds no images - did the screenshots get removed?"
+
+    rules = _gitignore_rules()
+    for image in embedded:
+        if image.startswith(("http://", "https://")):
+            continue
+        assert (PROJECT_ROOT / image).exists(), f"README references a missing image: {image}"
+        assert not _is_ignored(image, rules), (
+            f"README embeds {image}, but it is gitignored, so it would not exist "
+            "in the repository and the image would be broken."
+        )
 
 
 def test_dataset_snapshots_are_not_required_at_runtime():

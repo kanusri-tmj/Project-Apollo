@@ -11,6 +11,18 @@ clinician UI.
 
 ---
 
+## Screenshots
+
+| Home — patient form + risk verdict | Live Simulation — the real computation, animated |
+| --- | --- |
+| ![Home section](docs/screenshots/home.png) | ![Live simulation](docs/screenshots/live-simulation.png) |
+
+Both captured from the running app at 1440 px wide using headless Chrome. Open
+[`/?demo=1`](http://localhost:5000/?demo=1) to reproduce the second one: it
+pre-fills an example patient, scores it, and scrolls to the simulation.
+
+---
+
 ## Contents
 
 | Step | Where |
@@ -57,7 +69,8 @@ clinician UI.
 │   └── templates/index.html    # Home / Live Simulation / About Us
 ├── notebooks/
 │   └── heart_disease_analysis.ipynb   # the 11-step walkthrough
-├── tests/                      # pytest suite (69 tests, incl. deployment contract)
+├── tests/                      # pytest suite (80 tests, incl. deployment contract)
+├── docs/screenshots/           # README screenshots (captured from the running app)
 ├── data/                       # raw + processed CSVs (generated)
 ├── models/                     # versioned artifacts, metadata, MODEL_CARD.md
 └── reports/                    # comparison tables + figures (generated)
@@ -118,7 +131,10 @@ jupyter notebook notebooks/heart_disease_analysis.ipynb
 | `data/raw/heart_disease_raw.csv` | downloaded + binarised raw snapshot |
 | `data/processed/heart_disease_clean.csv` | de-duplicated analysis frame |
 | `reports/model_comparison.csv` | metrics for all three variants |
-| `reports/figures/*.png` | histograms, box plots, heatmap, ROC, confusion matrices, Lasso path |
+| `reports/metric_confidence_intervals.csv` | bootstrap 95% CI for every metric × variant |
+| `reports/calibration_metrics.csv` | Brier / log loss / calibration slope — raw vs Platt vs isotonic |
+| `reports/permutation_importance.csv` | ROC-AUC drop per raw measurement when shuffled |
+| `reports/figures/*.png` | histograms, box plots, heatmap, ROC, confusion matrices, Lasso path, + confidence intervals, calibration curve, permutation importance |
 | `reports/lasso_feature_selection.csv` | features surviving L1 as `C` grows |
 | `models/<variant>_v<version>_<ts>.joblib` | immutable versioned artifact |
 | `models/<variant>_latest.joblib` | stable pointer used by the apps |
@@ -132,19 +148,127 @@ jupyter notebook notebooks/heart_disease_analysis.ipynb
 Three variants are trained on the **same stratified 80/20 split**
 (`random_state=42`), with `C` tuned by stratified 5-fold CV on ROC-AUC.
 
-| Model | Accuracy | Precision | Recall | F1 | ROC-AUC | best `C` | CV ROC-AUC |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| baseline (no penalty) | 0.8852 | 0.8387 | 0.9286 | 0.8814 | 0.9610 | — | 0.8805 |
-| **Ridge (L2)** | **0.9016** | **0.8667** | 0.9286 | **0.8966** | **0.9654** | 3.162 | 0.8974 |
-| Lasso (L1) | 0.9016 | 0.8667 | 0.9286 | 0.8966 | 0.9632 | 3.162 | 0.9020 |
+| Model | Accuracy | Precision | Recall | Specificity | F1 | MCC | ROC-AUC | best `C` | CV ROC-AUC |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| baseline (no penalty) | 0.8852 | 0.8387 | 0.9286 | 0.8485 | 0.8814 | 0.7745 | 0.9610 | — | 0.8805 |
+| **Ridge (L2)** | **0.9016** | **0.8667** | 0.9286 | **0.8788** | **0.8966** | **0.8048** | **0.9654** | 3.162 | 0.8974 |
+| Lasso (L1) | 0.9016 | 0.8667 | 0.9286 | 0.8788 | 0.8966 | 0.8048 | 0.9632 | 3.162 | 0.9020 |
 
 *(Numbers from the bundled run; re-running regenerates them — Ridge is selected
-by test ROC-AUC.)*
+by test ROC-AUC. Specificity is reported alongside recall because for a
+screening aid the false-positive rate is what a clinician pays in unnecessary
+follow-up for every case caught.)*
 
 **Regularisation behaves as expected:** on the 25 post-encoding features,
 baseline and Ridge keep all coefficients non-zero, while **Lasso zeroes 7 of
-them**, performing embedded feature selection. The strongest predictors are
-`num_major_vessels`, `chest_pain_type`, `thalassemia`, `sex` and `st_slope`.
+them**. Read alongside the permutation-importance check below, though, that is
+not the same as dropping seven clinical measurements — see
+[What actually drives the prediction](#what-actually-drives-the-prediction).
+
+---
+
+## How much of this is signal?
+
+The held-out set holds **61 patients**, which cannot support four-decimal
+comparisons. Every metric is therefore reported with a 95% bootstrap confidence
+interval (2000 resamples of the test set, fixed seed):
+
+| Model | ROC-AUC | 95% CI | Recall | Specificity | Brier |
+| --- | --- | --- | --- | --- | --- |
+| baseline | 0.9610 | 0.9091 – 0.9935 | 0.9286 | 0.8485 | 0.0807 |
+| Ridge (L2) | 0.9654 | 0.9183 – 0.9956 | 0.9286 | 0.8788 | 0.0810 |
+| Lasso (L1) | 0.9632 | 0.9172 – 0.9944 | 0.9286 | 0.8788 | 0.0822 |
+
+![Bootstrap confidence intervals](reports/figures/metric_confidence_intervals.png)
+
+**The honest reading: the three models are statistically indistinguishable on
+this test set.** Ridge leads the baseline by 0.0044 ROC-AUC, but the intervals
+almost completely overlap, and the same holds for Ridge against Lasso. The
+regularisation story is still real — both penalised variants beat the baseline on
+*cross-validated* AUC (0.897 / 0.902 vs 0.881 across 242 training patients, where
+the estimate is far less noisy) — but a single 61-patient split does not prove
+it on its own. When comparing these models, trust the CV column.
+
+---
+
+## Probability quality (calibration)
+
+The app prints a risk percentage, so "is 90% really 90%?" deserves an answer.
+Calibration is measured by the Brier score, log loss, and the Cox calibration
+slope and intercept (a perfectly calibrated model has slope 1, intercept 0):
+
+| Variant | Brier | Log loss | Slope | Intercept |
+| --- | --- | --- | --- | --- |
+| uncalibrated (shipped) | **0.0810** | **0.2669** | 1.457 | −0.604 |
+| Platt scaling (sigmoid) | 0.0890 | 0.3064 | 2.137 | −0.516 |
+| isotonic | 0.0827 | 0.2680 | 1.472 | −0.727 |
+
+![Calibration curves](reports/figures/calibration_curves.png)
+
+Both recalibrators are fitted with 5-fold cross-validation on the **training**
+split only, so the test set stays untouched. Neither improves on the raw model:
+Platt scaling is clearly worse and isotonic is a wash. With only ~242 training
+patients, fitting an extra calibration map costs more variance than it removes,
+so **the shipped model stays uncalibrated** — a measured decision rather than an
+oversight.
+
+The slope above 1 says the raw probabilities are, if anything, slightly
+*conservative*: the log-odds sit a little too close to zero, so the model could
+be sharpened. That is the expected cost of the strongly regularised `C` = 3.162,
+and it is the direction a future calibration study should look.
+
+---
+
+## What actually drives the prediction
+
+Coefficient magnitude is not comparable across variants — they shrink on
+different scales — and it describes the *encoded* feature space, not the clinical
+one. Permutation importance asks the model-agnostic question instead: shuffle a
+raw measurement and measure how far ROC-AUC falls (30 repeats on the test set).
+
+| Rank | Measurement | Δ ROC-AUC | Std |
+| --- | --- | --- | --- |
+| 1 | `num_major_vessels` | 0.0683 | 0.0222 |
+| 2 | `chest_pain_type` | 0.0495 | 0.0161 |
+| 3 | `st_depression` | 0.0172 | 0.0053 |
+| 4 | `thalassemia` | 0.0129 | 0.0127 |
+| 5 | `st_slope` | 0.0115 | 0.0083 |
+| 6 | `resting_bp` | 0.0109 | 0.0059 |
+| 7 | `exercise_angina` | 0.0088 | 0.0047 |
+| 8 | `max_heart_rate` | 0.0086 | 0.0085 |
+| 9 | `sex` | 0.0083 | 0.0088 |
+| 10 | `age` | 0.0082 | 0.0058 |
+| 11 | `resting_ecg` | 0.0049 | 0.0038 |
+| 12 | `cholesterol` | 0.0024 | 0.0024 |
+| 13 | `fasting_blood_sugar` | 0.0012 | 0.0008 |
+
+![Permutation importance](reports/figures/permutation_importance.png)
+
+**This qualifies the Lasso result.** Lasso zeroes 7 of the 25 encoded columns,
+but mapping those columns back to clinical measurements shows the zeroing is
+mostly *level-level* sparsity inside categorical variables, not the removal of
+measurements:
+
+| Lasso-zeroed column | Parent measurement | Rank above |
+| --- | --- | --- |
+| `chest_pain_type_3.0` | `chest_pain_type` | **#2** |
+| `thalassemia_6.0` | `thalassemia` | **#4** |
+| `st_slope_3.0` | `st_slope` | **#5** |
+| `resting_ecg_1.0` | `resting_ecg` | #11 |
+| `age_band_70+`, `age_band_<40` | engineered age band | — |
+| `age_chol` | engineered age × cholesterol | — |
+
+Only `resting_ecg` is both dropped and genuinely unimportant. The two engineered
+features are the sole true removals, and both are redundant re-encodings of
+`age` (#10 by importance). So "Lasso performs feature selection" is accurate at
+the level of individual one-hot columns and misleading at the level of clinical
+measurements — a distinction the coefficient table alone cannot show.
+
+Note too that `sex` lands at #9 by permutation importance despite carrying a
+large coefficient, whereas `st_depression` (#3) was never in the top five by
+coefficient. Where the two rankings disagree, permutation importance is the
+fairer comparison, because it accounts for each feature's scale and its
+correlation with the others.
 
 ---
 
@@ -297,12 +421,15 @@ deployed; the Streamlit UI is a local/separate-host interface.
 python -m pytest
 ```
 
-69 tests cover cleaning, outlier detection, range validation, feature
+80 tests cover cleaning, outlier detection, range validation, feature
 engineering, pipeline output (finite, correctly shaped, standardised numerics),
 inference validation, threshold behaviour, every Flask endpoint, the deployment
 contract (WSGI entry point, blueprint start command and health check, runtime
 requirements, that the model artifacts are not gitignored, and that the request
-path imports no development-only package), and —
+path imports no development-only package), the evaluation diagnostics
+(specificity/MCC, bootstrap-interval reproducibility, calibration metrics,
+permutation importance recovering a planted signal, and that the figures render
+without overwriting the real report figures), and —
 importantly — that the Live Simulation maths matches the model exactly:
 `explain.explain_record` probabilities are asserted against
 `LogisticRegression.predict_proba`, and the per-term contributions are checked to
@@ -319,7 +446,28 @@ Lasso dropout rows render, and no JavaScript error surfaces.
 * Fixed `random_state=42` throughout; the split is stratified.
 * Small historical cohort (Cleveland, 1988) — not demographically representative
   and not calibrated to any local population.
-* Probabilities are model outputs, not clinically validated risk scores.
+* Probabilities are model outputs, not clinically validated risk scores. They are
+  *measurably* reasonably calibrated on this cohort (see
+  [Probability quality](#probability-quality-calibration)), but 61 internal test
+  patients are not external validation.
 * Outliers in `cholesterol` / `resting_bp` are **flagged, not deleted**, because
   they can be genuine high-risk patients. Adjust in `src/preprocessing.py` if your
   protocol requires winsorising.
+* The three variants are statistically indistinguishable on the 61-patient test
+  split; the regularisation benefit shows up in cross-validated AUC, not in the
+  single held-out score. See [How much of this is signal?](#how-much-of-this-is-signal).
+
+---
+
+## Credits
+
+| | |
+| --- | --- |
+| **Team** | J Simran (2520030166) · K Anusri (2520030432) |
+| **Team / Section** | 20 / 9 |
+| **Guide** | M Rani, CSE Department |
+| **Course** | Machine Learning (25SC2107E), A.Y. 2026–2027 |
+| **Institution** | KLH University (Deemed to be University), Bachupally, Hyderabad-500090, Telangana, India |
+
+Dataset: UCI Machine Learning Repository — *Cleveland Heart Disease* (Janosi,
+Steinbrunn, Pfisterer & Detrano, 1988).

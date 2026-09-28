@@ -22,6 +22,7 @@ Run end-to-end with::
 from __future__ import annotations
 
 import warnings
+from functools import partial
 from typing import Any
 
 import numpy as np
@@ -303,6 +304,52 @@ def run_training(
     sensitivity = evaluate.threshold_sensitivity(results[best_name]["model"], X_test, y_test)
     sensitivity.to_csv(config.REPORTS_DIR / f"threshold_sensitivity_{best_name}.csv", index=False)
 
+    # ---- Statistical robustness: bootstrap confidence intervals ----------- #
+    # A ~61-patient test set cannot support five-decimal comparisons, so every
+    # metric is reported with the range it would plausibly take on a re-draw.
+    ci_table = evaluate.metric_confidence_intervals(results, y_test)
+    ci_table.to_csv(config.REPORTS_DIR / "metric_confidence_intervals.csv", index=False)
+    evaluate.plot_metric_confidence_intervals(ci_table)
+
+    headline_ci = ci_table[ci_table["metric"].isin(("roc_auc", "recall", "specificity", "brier"))]
+    print("[train] Bootstrap 95% confidence intervals:")
+    print(headline_ci.to_string(index=False, float_format=lambda v: f"{v:.4f}"))
+
+    # Say plainly when the headline difference is not statistically conclusive.
+    for other in VARIANTS:
+        if other == best_name:
+            continue
+        if evaluate.intervals_overlap(ci_table, best_name, other, "roc_auc"):
+            print(
+                f"[train] NOTE: '{best_name}' vs '{other}' ROC-AUC intervals overlap - "
+                "at this test size the difference is not statistically conclusive."
+            )
+
+    # ---- Probability quality: calibration --------------------------------- #
+    # Rebuild the winning pipeline (same variant and tuned C) so the raw model
+    # can be compared against Platt and isotonic recalibration.
+    best_c = results[best_name]["best_params"].get("classifier__C")
+    build_best = (
+        partial(build_model_pipeline, best_name)
+        if best_c is None
+        else partial(build_model_pipeline, best_name, C=float(best_c))
+    )
+    calibration_table, calibration_curves = evaluate.compare_calibration(
+        build_best, X_train, y_train, X_test, y_test, variant=best_name
+    )
+    calibration_table.to_csv(config.REPORTS_DIR / "calibration_metrics.csv", index=False)
+    evaluate.plot_calibration_curves(calibration_curves, calibration_table, best_name)
+
+    print("[train] Calibration (Brier, log loss, Cox slope/intercept):")
+    print(calibration_table.to_string(index=False, float_format=lambda v: f"{v:.4f}"))
+
+    # ---- Independent check on the coefficient story ----------------------- #
+    # Coefficients are not comparable across variants; permutation importance is
+    # a model-agnostic second opinion on which measurements actually matter.
+    importance = evaluate.permutation_importance_report(results, X_test, y_test)
+    importance.to_csv(config.REPORTS_DIR / "permutation_importance.csv", index=False)
+    evaluate.plot_permutation_importance(importance, order_by=best_name)
+
     output = {
         "results": results,
         "comparison": table,
@@ -314,6 +361,9 @@ def run_training(
         "eda": eda_output,
         "coefficients": coef_frames,
         "lasso_path": lasso_path,
+        "confidence_intervals": ci_table,
+        "calibration": calibration_table,
+        "permutation_importance": importance,
     }
 
     # ---- 7. Persist every variant, then the best one's model card --------- #

@@ -17,6 +17,12 @@ data/processed/*.csv
 reports/*.csv
 reports/figures/*.png
 
+# ...but the three diagnostic figures the README embeds are tracked, so their
+# numbers can never drift from the tables beside them (same run writes both).
+!reports/figures/metric_confidence_intervals.png
+!reports/figures/calibration_curves.png
+!reports/figures/permutation_importance.png
+
 # Timestamped artifacts are an audit trail and stay out of Git ...
 models/*.joblib
 # ... but the stable pointers and their metadata are what the deployed service
